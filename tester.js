@@ -176,6 +176,31 @@ const Tester = (() => {
     toBeFalsy() { this._assert(!this.actual, { verb: 'to be falsy' }); }
 
     toBeNull() { this._assert(this.actual === null, { verb: 'to be null' }); }
+
+    toBeUndefined() { this._assert(this.actual === undefined, { verb: 'to be undefined' }); }
+
+    toBeGreaterThan(expected) { this._assert(this.actual > expected, { expected, verb: 'to be greater than' }); }
+
+    toBeLessThan(expected) { this._assert(this.actual < expected, { expected, verb: 'to be less than' }); }
+
+    toThrowError(errorText = null) {
+      try {
+        this.actual();
+        this._assert(false, { verb: 'to throw an error' });
+      } catch (error) {
+        if (errorText) {
+          this._assert(error.message === errorText, { verb: 'to throw an error', expected: errorText });
+        }
+      }
+    }
+
+    toRespondTo(methodName) {
+      this._assert(typeof this.actual[methodName] === 'function', { verb: 'to respond to', expected: methodName });
+    }
+
+    toBeInstanceOf(expected) {
+      this._assert(String(this.actual) === expected, { verb: 'to be an instance of', expected: expected });
+    }
   }
 
   return Tester;
