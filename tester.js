@@ -2,7 +2,7 @@ const Tester = (() => {
   const _runningInGas = new WeakMap();
 
   class Tester {
-    static enable() {
+    static setup() {
       const tester = new Tester();
       tester.runInGas(false);
       globalThis.describe = tester.describe.bind(tester);
