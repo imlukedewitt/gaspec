@@ -9,7 +9,9 @@ const Tester = (() => {
       globalThis.context = tester.context.bind(tester);
       globalThis.it = tester.it.bind(tester);
       globalThis.expect = tester.expect.bind(tester);
-      globalThis.run = tester.run.bind(tester);
+      globalThis.runInGas = tester.runInGas.bind(tester);
+      globalThis.tester = tester;
+      globalThis.printHeader = tester.printHeader.bind(tester);
       return tester;
     }
 
@@ -59,11 +61,7 @@ const Tester = (() => {
 
     runGroup(group, level = 0) {
       if (group !== this.rootGroup) {
-        if (level === 1) {
-          console.log(`Describe "${group.description}"`);
-        } else {
-          console.log("  ".repeat(level - 1) + group.description);
-        }
+        console.log("  ".repeat(level - 1) + group.description);
       }
 
       group.tests.forEach(({ description, fn }) => {
@@ -84,6 +82,13 @@ const Tester = (() => {
     run() {
       this.runGroup(this.rootGroup);
     }
+
+    printHeader(message) {
+      if (this.evironmentMismatch()) return;
+      const line = '='.repeat(message.length + 8);
+      const header = `\n${line}\n#   ${message}   #\n${line}\n`;
+      this.describe(header, () => { });
+    }
   }
 
   class TestGroup {
@@ -96,20 +101,32 @@ const Tester = (() => {
   }
 
   class Expectation {
-    constructor(actual) {
+    constructor(actual, negated = false) {
       this.actual = actual;
+      this.negated = negated;
+    }
+
+    get not() {
+      return new Expectation(this.actual, !this.negated);
+    }
+
+    _assert(condition, {
+      message = `${this.actual}`,
+      verb = 'to be',
+      expected = ''
+    }) {
+      if (this.negated ? condition : !condition) {
+        const verbText = `${this.negated ? 'not ' : ''}${verb}`;
+        throw new Error(`Expected ${message} ${verbText} ${expected}`);
+      }
     }
 
     toBe(expected) {
-      if (this.actual !== expected) {
-        throw new Error(`Expected ${this.actual} to be ${expected}`);
-      }
+      this._assert(this.actual === expected, { expected });
     }
 
     toEqual(expected) {
-      if (this.actual != expected) {
-        throw new Error(`Expected ${this.actual} to equal ${expected}`);
-      }
+      this._assert(this.actual == expected, { expected, verb: 'to equal' });
     }
 
     toEqualObject(expected) {
@@ -117,37 +134,48 @@ const Tester = (() => {
         throw new Error('Actual and expected must be objects');
       }
 
-      if (Object.keys(this.actual).length !== Object.keys(expected).length) {
-        throw new Error('Actual and expected do not have the same number of keys');
-      }
+      const deepCompare = (obj1, obj2, path = '') => {
+        const diffs = [];
 
-      const differences = [];
-      const allKeys = new Set([...Object.keys(this.actual), ...Object.keys(expected)]);
-      allKeys.forEach(key => {
-        if (this.actual[key] !== expected[key]) {
-          differences.push({ key, actual: this.actual[key], expected: expected[key] });
+        if (typeof obj1 !== typeof obj2) {
+          return [`${path}: type mismatch ${typeof obj1} !== ${typeof obj2}`];
         }
+
+        if (typeof obj1 === 'object' && obj1 !== null) {
+          Object.keys({ ...obj1, ...obj2 }).forEach(key => {
+            const newPath = path ? `${path}.${key}` : key;
+            if (typeof obj1[key] === 'object' && typeof obj2[key] === 'object') {
+              diffs.push(...deepCompare(obj1[key], obj2[key], newPath));
+            } else if (obj1[key] !== obj2[key]) {
+              diffs.push(`${newPath}: ${obj1[key]} !== ${obj2[key]}`);
+            }
+          });
+          return diffs;
+        }
+
+        return obj1 !== obj2 ? [`${path}: ${obj1} !== ${obj2}`] : [];
+      };
+
+      const diffs = deepCompare(this.actual, expected);
+
+      this._assert(diffs.length === 0, {
+        verb: 'to match',
+        message: 'objects',
+        expected: diffs.length ? '\n' + diffs.join('\n') : ''
       });
-
-      if (differences.length > 0) {
-        const message = differences.map(({ key, actual, expected }) => {
-          return `${key}: expected ${actual} to equal ${expected}`;
-        }).join('\n');
-        throw new Error(message);
-      }
     }
 
-    toBeTruthy() {
-      if (!this.actual) {
-        throw new Error(`Expected ${this.actual} to be truthy`);
-      }
+    toContain(expected) {
+      if (typeof expected.includes !== 'function') throw new Error('Expected must be an array');
+
+      this._assert(this.actual.includes(expected), { expected, verb: 'to contain' });
     }
 
-    toBeFalsy() {
-      if (this.actual) {
-        throw new Error(`Expected ${this.actual} to be falsy`);
-      }
-    }
+    toBeTruthy() { this._assert(this.actual, { verb: 'to be truthy' }); }
+
+    toBeFalsy() { this._assert(!this.actual, { verb: 'to be falsy' }); }
+
+    toBeNull() { this._assert(this.actual === null, { verb: 'to be null' }); }
   }
 
   return Tester;
