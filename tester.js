@@ -166,7 +166,9 @@ const Tester = (() => {
     }
 
     toContain(expected) {
-      if (typeof expected.includes !== 'function') throw new Error('Expected must be an array');
+      if (!this.actual || typeof this.actual.includes !== 'function') {
+        throw new Error('Actual value must be an array or string');
+      }
 
       this._assert(this.actual.includes(expected), { expected, verb: 'to contain' });
     }
